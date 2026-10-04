@@ -6,56 +6,71 @@ on:
 jobs:
   stream:
     runs-on: ubuntu-latest
-
-    # Maximum runtime: 11 hours 20 minutes
     timeout-minutes: 680
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Chromium, FFmpeg and Xvfb
+      - name: Install Chromium FFmpeg Xvfb
         run: |
           sudo apt-get update
           sudo apt-get install -y chromium-browser ffmpeg xvfb
 
       - name: Start virtual display
         run: |
-          Xvfb :99 -screen 0 1080x1920x24 &
+          Xvfb :99 -screen 0 1080x1920x24 -ac &
+          sleep 3
           echo "DISPLAY=:99" >> $GITHUB_ENV
 
-      - name: Open Ludo Game
+      - name: Launch Ludo Game Fullscreen
         run: |
           chromium-browser \
             --no-sandbox \
             --disable-dev-shm-usage \
             --disable-gpu \
+            --disable-software-rasterizer \
+            --disable-infobars \
+            --disable-session-crashed-bubble \
+            --disable-translate \
+            --no-first-run \
+            --no-default-browser-check \
             --autoplay-policy=no-user-gesture-required \
-            --kiosk \
+            --window-position=0,0 \
             --window-size=1080,1920 \
-            "https://soulfulmat1.github.io/ludo-live-game/" &
-          
-          sleep 15
+            --start-fullscreen \
+            --kiosk \
+            "https://soulfulmat1.github.io/ludo-live-game/" \
+            >/tmp/chromium.log 2>&1 &
 
-      - name: Stream to YouTube for 11 hours 20 minutes
+          sleep 20
+
+      - name: Stream Ludo to YouTube
         env:
           YOUTUBE_STREAM_KEY: ${{ secrets.YOUTUBE_STREAM_KEY }}
         run: |
           timeout --signal=INT 40800s ffmpeg \
             -f x11grab \
+            -draw_mouse 0 \
             -framerate 30 \
             -video_size 1080x1920 \
-            -i :99.0 \
+            -i :99.0+0,0 \
             -f lavfi \
             -i anullsrc=channel_layout=stereo:sample_rate=44100 \
+            -map 0:v:0 \
+            -map 1:a:0 \
             -c:v libx264 \
             -preset veryfast \
             -tune zerolatency \
             -pix_fmt yuv420p \
+            -r 30 \
+            -g 60 \
+            -keyint_min 60 \
+            -sc_threshold 0 \
             -b:v 4500k \
+            -minrate 4500k \
             -maxrate 4500k \
             -bufsize 9000k \
-            -g 60 \
             -c:a aac \
             -b:a 128k \
             -ar 44100 \
