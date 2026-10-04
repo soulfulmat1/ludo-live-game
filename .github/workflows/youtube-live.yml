@@ -20,7 +20,6 @@ jobs:
             ffmpeg \
             xvfb \
             pulseaudio \
-            pulseaudio-utils
             pulseaudio-utils \
             xdotool
 
