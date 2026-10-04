@@ -1,0 +1,64 @@
+name: YouTube Ludo Live
+
+on:
+  workflow_dispatch:
+
+jobs:
+  stream:
+    runs-on: ubuntu-latest
+
+    # Maximum runtime: 11 hours 20 minutes
+    timeout-minutes: 680
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Chromium, FFmpeg and Xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser ffmpeg xvfb
+
+      - name: Start virtual display
+        run: |
+          Xvfb :99 -screen 0 1080x1920x24 &
+          echo "DISPLAY=:99" >> $GITHUB_ENV
+
+      - name: Open Ludo Game
+        run: |
+          chromium-browser \
+            --no-sandbox \
+            --disable-dev-shm-usage \
+            --disable-gpu \
+            --autoplay-policy=no-user-gesture-required \
+            --kiosk \
+            --window-size=1080,1920 \
+            "https://soulfulmat1.github.io/ludo-live-game/" &
+          
+          sleep 15
+
+      - name: Stream to YouTube for 11 hours 20 minutes
+        env:
+          YOUTUBE_STREAM_KEY: ${{ secrets.YOUTUBE_STREAM_KEY }}
+        run: |
+          timeout --signal=INT 40800s ffmpeg \
+            -f x11grab \
+            -framerate 30 \
+            -video_size 1080x1920 \
+            -i :99.0 \
+            -f lavfi \
+            -i anullsrc=channel_layout=stereo:sample_rate=44100 \
+            -c:v libx264 \
+            -preset veryfast \
+            -tune zerolatency \
+            -pix_fmt yuv420p \
+            -b:v 4500k \
+            -maxrate 4500k \
+            -bufsize 9000k \
+            -g 60 \
+            -c:a aac \
+            -b:a 128k \
+            -ar 44100 \
+            -t 11:20:00 \
+            -f flv \
+            "rtmp://a.rtmp.youtube.com/live2/${YOUTUBE_STREAM_KEY}"
