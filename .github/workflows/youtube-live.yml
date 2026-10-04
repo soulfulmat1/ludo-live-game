@@ -12,16 +12,37 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Chromium FFmpeg Xvfb
+      - name: Install required packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y chromium-browser ffmpeg xvfb
+          sudo apt-get install -y \
+            chromium-browser \
+            ffmpeg \
+            xvfb \
+            pulseaudio \
+            pulseaudio-utils
 
-      - name: Start virtual display
+      - name: Start virtual display and audio
         run: |
+          # Start virtual display
           Xvfb :99 -screen 0 1080x1920x24 -ac &
           sleep 3
           echo "DISPLAY=:99" >> $GITHUB_ENV
+
+          # Start PulseAudio
+          pulseaudio --start --exit-idle-time=-1
+
+          # Create virtual audio output
+          pactl load-module module-null-sink \
+            sink_name=VirtualSink \
+            sink_properties=device.description=VirtualSink
+
+          # Make it the default output
+          pactl set-default-sink VirtualSink
+
+          echo "PULSE_SINK=VirtualSink" >> $GITHUB_ENV
+
+          sleep 3
 
       - name: Launch Ludo Game Fullscreen
         run: |
@@ -45,7 +66,7 @@ jobs:
 
           sleep 20
 
-      - name: Stream Ludo to YouTube
+      - name: Stream Ludo Game with Audio to YouTube
         env:
           YOUTUBE_STREAM_KEY: ${{ secrets.YOUTUBE_STREAM_KEY }}
         run: |
@@ -55,8 +76,8 @@ jobs:
             -framerate 30 \
             -video_size 1080x1920 \
             -i :99.0+0,0 \
-            -f lavfi \
-            -i anullsrc=channel_layout=stereo:sample_rate=44100 \
+            -f pulse \
+            -i VirtualSink.monitor \
             -map 0:v:0 \
             -map 1:a:0 \
             -c:v libx264 \
@@ -68,12 +89,12 @@ jobs:
             -keyint_min 60 \
             -sc_threshold 0 \
             -b:v 4500k \
-            -minrate 4500k \
             -maxrate 4500k \
             -bufsize 9000k \
             -c:a aac \
             -b:a 128k \
             -ar 44100 \
+            -ac 2 \
             -t 11:20:00 \
             -f flv \
             "rtmp://a.rtmp.youtube.com/live2/${YOUTUBE_STREAM_KEY}"
